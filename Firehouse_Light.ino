@@ -8,10 +8,10 @@
  modified by Tom Igoe, based on work by Adrian McEwen.
  -----------------------------------------------------
  
- Modified by : Brian Leschke
+ Modified by : Brian Leschke 13617
  
- Date: March 17, 2016
- Version 5.4
+ Date: June 21, 2016
+ Version 6.0
  
  Created to connect to server on Raspberry Pi or EasyPHP.
  This program will light up a traffic light at Co. 13 Fallston
@@ -26,45 +26,62 @@
  This is designed to receive multiple fire/ems calls at any
  given time. (Up to 3 calls only)
  
- Information about HIGH and LOW values.
+ *** Information about HIGH and LOW values. ***
     Pins not connected to the relay use HIGH for ON and LOW for OFF.
     Pins connected to the relay use LOW for ON and HIGH for OFF.
+    
+ *** UPDATE HISTORY ***
+ 
+ 12/8/2011 - Initial release
+ 2012-2015 - Unspecified Updates
+ 6/19/2016 - "cleaned up", organized, and simplified code.
+ 6/19/2016 - ADDED UDP SERVER: This unit will send UDP packets to the receiver box located at my home.
+             This is to make sure that the Traffic Light is working correctly and the network is active. 
  
  */
  
+// ---------------- LIBRARIES ---------------- 
+ 
 #include <SPI.h>
 #include <Ethernet.h>
+#include <EthernetUdp.h>
 //#include <VirtualWire.h>
 #include <stdlib.h>
 
-int powerLED = 2;
-int ledClient = 3;
-int ledConnect = 4;
-int ledError = 5;
-int TrafficRED = 6;
+// ---------------- PIN AND TIME CONFIGURATION ---------------- 
+
+int powerLED      = 2;
+int ledClient     = 3;
+int ledConnect    = 4;
+int ledError      = 5;
+int TrafficRED    = 6;
 int TrafficYELLOW = 7;
-int TrafficGREEN = 8;
+int TrafficGREEN  = 8;
 
 char Str[11];
-int prevNum = 0;
-int num = 0;
+int prevNum  = 0;
+int num      = 0;
 long onUntil = 0;
-long pollingInterval = 1000; // in milliseconds
-long onTimeGreen = 299000; // time, in milliseconds, for Green light to be on after new alert.
-long onTimeRed = 179000;  //  time, in milliseconds, for Red light to be on after new alert.
-long onTimeYellow = 119000;  // time, in milliseconds, for Yellow light to be on after new alert.
+long pollingInterval = 1000;   // polling time, in milliseconds
+long onTimeGreen     = 299000; // time, in milliseconds, for Green light to be on after new alert.
+long onTimeRed       = 179000; //  time, in milliseconds, for Red light to be on after new alert.
+long onTimeYellow    = 119000; // time, in milliseconds, for Yellow light to be on after new alert.
 
 
-// Enter a MAC address for your controller below.
-// Newer Ethernet shields have a MAC address printed on a sticker on the shield
-byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; // Older Ethernet cards require DE:AD:BE:EF:FE:ED as MAC.
-char serverName[] = "SERVER ADDRESS";
+// ---------------- NETWORK CONFIGURATION ---------------- 
 
-// Initialize the Ethernet client library
-// with the IP address and port of the server 
-// that you want to connect to (port 80 is default for HTTP):
+byte mac[]                  = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; //Arduino MAC address
+const char SERVER_NAME[]    = "WEBSERVER ADDRESS"; // Address of the webserver
+int SERVER_PORT             = WEBSERVER PORT; // webserver port
+const char UDP_SERV_DEST[]  = "ADDRESS TO SEND UDP TO"; // Address to send UDP packets to
+int UDP_PORT                = UDP PORT; // port to send UDP packets over
+char UDP_MESSAGE[]          = "UDP MESSAGE"; // UDP packet message
+
+
+// ---------------- INITIALIZATION ----------------
 
 EthernetClient client;
+EthernetUDP Udp;
 
 void setup()
 {
@@ -88,75 +105,94 @@ void setup()
 
 // ---------------- Test Lights ----------------
 
-  digitalWrite(TrafficRED,LOW);    // Red lamp test: ON
+  digitalWrite(TrafficRED,LOW);     // Red lamp test: ON
   delay(500);
-  digitalWrite(TrafficRED,HIGH);   // Red lamp test: OFF
+  digitalWrite(TrafficRED,HIGH);    // Red lamp test: OFF
   delay(500);  
-  digitalWrite(TrafficYELLOW,LOW); // Yellow lamp test: ON
+  digitalWrite(TrafficYELLOW,LOW);  // Yellow lamp test: ON
   delay(500);
   digitalWrite(TrafficYELLOW,HIGH); // Yellow lamp test: OFF
   delay(500);
-  digitalWrite(TrafficGREEN,LOW);  // Green lamp test: ON
+  digitalWrite(TrafficGREEN,LOW);   // Green lamp test: ON
   delay(500);
-  digitalWrite(TrafficGREEN,HIGH); // Green lamp test :OFF
+  digitalWrite(TrafficGREEN,HIGH);  // Green lamp test :OFF
   delay(500);
-  digitalWrite(TrafficRED,LOW);    // Error lamp combo test: ON
-  digitalWrite(TrafficYELLOW,LOW); // Error lamp combo test: ON
+  digitalWrite(TrafficRED,LOW);     // Error lamp combo test: ON
+  digitalWrite(TrafficYELLOW,LOW);  // Error lamp combo test: ON
   delay(500);
   digitalWrite(TrafficRED,HIGH);    // Error lamp combo test: OFF
   digitalWrite(TrafficYELLOW,HIGH); // Error lamp combo test: OFF
   delay(500);
-  digitalWrite(TrafficRED,LOW);    // Full lamp test: ON
-  digitalWrite(TrafficYELLOW,LOW); // Full lamp test: ON
-  digitalWrite(TrafficGREEN,LOW);  // Full lamp test: ON
+  digitalWrite(TrafficRED,LOW);     // Full lamp test: ON
+  digitalWrite(TrafficYELLOW,LOW);  // Full lamp test: ON
+  digitalWrite(TrafficGREEN,LOW);   // Full lamp test: ON
   delay(3000);
-  digitalWrite(TrafficRED,HIGH);     // Full lamp test OFF
-  digitalWrite(TrafficYELLOW,HIGH);  // Full lamp test OFF
-  digitalWrite(TrafficGREEN,HIGH);   // Full lamp test OFF
+  digitalWrite(TrafficRED,HIGH);    // Full lamp test OFF
+  digitalWrite(TrafficYELLOW,HIGH); // Full lamp test OFF
+  digitalWrite(TrafficGREEN,HIGH);  // Full lamp test OFF
+
+  
+// ---------------- Start the Ethernet connection ----------------
 
   restart:
-  
-  // start the Ethernet connection:
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP");
      for(int x = 0; x < 2; x++){
        digitalWrite(ledError,HIGH);
        digitalWrite(TrafficRED,LOW);    // red lamp on
        digitalWrite(TrafficYELLOW,LOW); // yellow lamp on
-     delay(500);
+       delay(500);
        digitalWrite(ledError,LOW);
        digitalWrite(TrafficRED,HIGH);    // red lamp off
        digitalWrite(TrafficYELLOW,HIGH); // yellow lamp off
-     delay(500);
+       delay(500);
      }
-    // no point in carrying on, so do nothing forevermore:
-    //while(true);
     delay(3000);  //delay before resetting Traffic Light
      goto restart;
   }
   // give the Ethernet shield time to initialize:
   delay(2000);
-
-
 }
+
 void loop()
 {
-    Serial.println("Resetting Ethernet"); // Must be here to prevent system from periodically freezing on ethernet.
-    client.stop();
+  
+  // ---------------- NETWORK/SYSTEM STABILITY: FIXES SYSTEM FREEZING ----------------
+  
+  Serial.println("Resetting Ethernet");
+  client.stop();
+  delay(1000);
+  Ethernet.begin(mac);
+  delay(2000);
+
+  // ---------------- LIFE STATUS: Send life status (UDP Packets) to home ----------------
+  
+    // Send life status back to server
+  for(int x = 0; x < 4; x++){ 
+    digitalWrite(ledError, HIGH);
+    Serial.println("Sending UDP Packet");
+    Udp.begin(UDP_PORT); //open UDP Port
+    Udp.beginPacket(UDP_SERV_DEST, UDP_PORT);
+    Udp.write(UDP_MESSAGE);
+    Udp.endPacket(); 
+    Udp.stop();
+    Serial.println("Packet Sent");
+    digitalWrite(ledError, LOW); //blink light every time a packet is sent
     delay(1000);
-    Ethernet.begin(mac);
-    delay(2000);
-    
-    Serial.println("connecting...");
+   }   
+
+  // ---------------- FIRE/EMS: CONNECT TO WEBSERVER ----------------
+     
+  Serial.println("connecting...");
   // if you get a connection, report back via serial:
   digitalWrite(ledConnect,HIGH);
   digitalWrite(ledClient,LOW);
   digitalWrite(ledError,LOW);
-  if (client.connect(serverName, PORT HERE)) {
+  if (client.connect(SERVER_NAME, SERVER_PORT)) {
     Serial.println("connected");
     digitalWrite(ledConnect,HIGH);
     // Make a HTTP request:
-    //client.println("GET /my%20portable%20files/LonelyGmail.php");   //EasyPHP pc server pathway
+    //client.println("GET /my%20portable%20files/GetGmail.php");   //EasyPHP pc server pathway
     client.println("GET /GetGmail.php");  // Apache server pathway.
     client.println();
     int timer = millis();
@@ -174,7 +210,7 @@ void loop()
      }
   }
 
-	// if there's data ready to be read:
+  // if there's data ready to be read:
   if (client.available()) {  
      int i = 0;
      digitalWrite(ledError,LOW);
@@ -214,6 +250,9 @@ void loop()
     }
     Serial.println("Disconnecting."); //disconnecting from server to reconnect
     client.stop();
+    
+    // ---------------- FIRE\EMS: ALERT FOR FIRE\EMS CALL ----------------   
+    
     if(num > prevNum) {
       Serial.println("FIRE ALERT!");  //alert for new email
       Serial.println("RED LIGHT ON");
@@ -261,4 +300,5 @@ prevNum = num;
     }
   delay(pollingInterval);  //wait time until restart.
 }
+
 
