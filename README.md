@@ -19,7 +19,7 @@ Project Breakdown:
         * YELLOW - "Get Set": 3-5 Minutes (Flashes 3 times, then solid)
         * GREEN - "Go": 5-10 Minutes (Flashes 3 times, then solid)
 * Reset Button
-    * Reset's Arduino when pressed
+    * Reset Arduino when pressed
 
 ### **Prerequisities**
 
@@ -27,6 +27,7 @@ You will need:
 
 1. Arduino Uno
 2. Sainsmart 4 module high voltage relay
+3. 2 RED, 1 YELLOW, 1 GREEN LED
 3. 1 monentary push button
 4. Arduino programming software
 5. Webserver hosting script.
