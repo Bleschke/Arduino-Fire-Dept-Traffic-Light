@@ -38,7 +38,7 @@ In order to use successfully implement this project and its code, you will need 
     
 ## **Uploading**
 
-The code can be uploaded to the ESP8266 by a serial (USB) connection. 
+The code can be uploaded by a serial (USB) connection. 
 
 
 
